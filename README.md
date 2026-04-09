@@ -1,4 +1,4 @@
-# 🎥 Real-Time Human Action, Emotion & Intent Recognition
+# 🎥 RWB Final Progect MMC / Team Nam Ne DANO
 
 Проект по **распознаванию действий, в реальном времени и видио** с использованием компьютерного зрения и позных моделей.  
 Система работает **на CPU**.
@@ -77,7 +77,7 @@ python app/main.py
 
 ```
 ---
-### 🤖 Telegram-бот
+### 🤖 Telegram-бот 
 ## Бот принимает:
 - 🎥 видео
 ## И возвращает видео/картинку с:
