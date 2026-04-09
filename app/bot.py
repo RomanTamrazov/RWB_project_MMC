@@ -15,7 +15,7 @@ from telegram.ext import (
 
 from process_media import process_video
 
-TOKEN = "8668673885:AAElLmg8nxLSlMO6ZCWg98NwDN6lWHGZ1DI"
+TOKEN = ""
 MAX_VIDEO_MB = 20
 
 DOWNLOAD_DIR = "bot_data"
