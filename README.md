@@ -63,8 +63,8 @@ UI / Video / Telegram Bot
 
 ### 1️⃣ Клонировать репозиторий
 ```bash
-git clone 
-cd 
+git clone git@github.com:RomanTamrazov/RWB_project_MMC.git
+cd RWB_project_MMC
 
 python -m venv venv
 
