@@ -1,0 +1,9 @@
+numpy>=1.23
+torch>=2.1
+torchvision>=0.16
+ultralytics>=8.1
+opencv-python
+pillow
+mediapipe==0.10.14
+urllib3<2
+python-telegram-bot==20.7
