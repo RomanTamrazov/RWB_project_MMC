@@ -39,7 +39,7 @@ class IntentPredictor:
         self.latest_scores = {cls: 0.0 for cls in self.REQUIRED_CLASSES}
 
         self.last_action = "статика"
-        self.action_hist = deque(maxlen=10)
+        self.action_hist = deque(maxlen=5)
         self.jump_cooldown = 0
 
     @staticmethod
@@ -158,6 +158,7 @@ class IntentPredictor:
         vy_up = max(vy_recent) if vy_recent else 0.0
         vy_down = min(vy_recent) if vy_recent else 0.0
         vy_span = self._ptp(vy_recent)
+        vx_changes = self._sign_changes(vx_recent, eps=0.005)
 
         hand_motion = self._mean(hand_recent)
         hands_up_ratio = self._mean(hands_up_recent)
@@ -190,24 +191,34 @@ class IntentPredictor:
             squat_score *= 0.75
 
                                                                                      
-        takeoff = self._clip01((vy_up - 0.07) / 0.12)
-        landing = self._clip01((abs(vy_down) - 0.07) / 0.12)
+        takeoff = self._clip01((vy_up - 0.020) / 0.080)
+        landing = self._clip01((abs(vy_down) - 0.020) / 0.080)
         impulse = takeoff * landing
-        flight = self._clip01((ankle_amp - 0.08) / 0.10)
-        knee_extended = self._clip01((knee_mean - 133.0) / 28.0)
+        jump_single = max(takeoff, landing)
+        flight = self._clip01((ankle_amp - 0.065) / 0.11)
+        knee_extended = self._clip01((knee_mean - 128.0) / 34.0)
+        vertical_energy = self._clip01((self._mean([abs(v) for v in vy_recent]) - 0.012) / 0.055)
+        jump_span = self._clip01((vy_span - 0.045) / 0.120)
         jump_score = (
-            0.45 * impulse +
-            0.22 * flight +
-            0.18 * knee_extended +
-            0.10 * self._clip01((vy_span - 0.10) / 0.15) +
-            0.05 * self._clip01((speed_mean - 0.03) / 0.07)
+            0.26 * impulse +
+            0.28 * jump_single +
+            0.18 * jump_span +
+            0.12 * flight +
+            0.10 * vertical_energy +
+            0.06 * knee_extended
         )
-        if impulse < 0.14:
-            jump_score *= 0.55
+        if jump_single > 0.60 and jump_span > 0.25:
+            jump_score = min(1.0, jump_score + 0.08)
+        if impulse < 0.08 and jump_single < 0.48:
+            jump_score *= 0.72
         if knee_now < 122.0 and hip_now > 0.64:
-            jump_score *= 0.55
+            jump_score *= 0.60
+        if squat_score > 0.62 and vy_span < 0.09:
+            jump_score *= 0.68
+        if ankle_changes >= 4 and horiz_mean > 0.026 and vy_span < 0.12:
+            jump_score *= 0.78
         if self.jump_cooldown > 0:
-            jump_score *= 0.65
+            jump_score *= 0.82
 
                                                                               
         wave_score = (
@@ -218,19 +229,28 @@ class IntentPredictor:
         )
 
                                                                     
-        step_motion = self._clip01((horiz_mean - 0.016) / 0.07)
-        step_leg_alt = self._clip01((ankle_swap - 0.018) / 0.07)
-        step_leg_phase = self._clip01((ankle_changes - 2.0) / 4.0)
+        step_motion = self._clip01((horiz_mean - 0.007) / 0.050)
+        step_leg_alt = self._clip01((ankle_swap - 0.012) / 0.065)
+        step_leg_phase = self._clip01((ankle_changes - 1.0) / 4.0)
+        step_cadence = self._clip01((vx_changes - 1.0) / 5.0)
+        step_vertical_stable = self._clip01((0.15 - vy_span) / 0.15)
+        step_speed = self._clip01((speed_mean - 0.014) / 0.050)
         step_score = (
-            0.38 * step_motion +
-            0.30 * step_leg_alt +
-            0.20 * step_leg_phase +
-            0.07 * self._clip01((knee_now - 118.0) / 30.0) +
-            0.05 * self._clip01((speed_mean - 0.020) / 0.060)
+            0.36 * step_motion +
+            0.17 * step_leg_alt +
+            0.16 * step_leg_phase +
+            0.15 * step_cadence +
+            0.10 * step_vertical_stable +
+            0.06 * step_speed
         )
-                                                 
-        step_score *= (1.0 - 0.30 * self._clip01((hip_now - 0.64) / 0.12))
-        step_score *= (1.0 - 0.35 * self._clip01((ankle_amp - 0.11) / 0.10))
+        step_center_gate = self._clip01((horiz_mean - 0.014) / 0.030) * self._clip01((0.12 - vy_span) / 0.12)
+        step_score = min(1.0, step_score + 0.22 * step_center_gate)
+        if ankle_changes >= 2 and horiz_mean > 0.012:
+            step_score = min(1.0, step_score + 0.10)
+        step_score *= (1.0 - 0.18 * self._clip01((hip_now - 0.66) / 0.10))
+        step_score *= (1.0 - 0.22 * self._clip01((ankle_amp - 0.14) / 0.12))
+        if jump_single > 0.70 and vy_span > 0.11:
+            step_score *= 0.72
 
                                                        
         static_score = (
@@ -240,6 +260,8 @@ class IntentPredictor:
             0.15 * self._clip01((knee_now - 145.0) / 25.0)
         )
         static_score *= (1.0 - 0.35 * self._clip01((ankle_amp - 0.05) / 0.08))
+        static_score *= (1.0 - 0.40 * self._clip01((horiz_mean - 0.008) / 0.045))
+        static_score *= (1.0 - 0.35 * self._clip01((vy_span - 0.040) / 0.100))
 
         return {
             "статика": self._clip01(static_score),
@@ -259,42 +281,89 @@ class IntentPredictor:
         raw_scores = self._binary_scores()
 
         for action, score in raw_scores.items():
-            self.binary_ema[action] = 0.70 * self.binary_ema[action] + 0.30 * score
+            self.binary_ema[action] = 0.62 * self.binary_ema[action] + 0.38 * score
+
+        if raw_scores["прыжок"] > 0.70:
+            self.binary_ema["прыжок"] = max(self.binary_ema["прыжок"], raw_scores["прыжок"] * 0.88)
+        if raw_scores["шаг"] > 0.58:
+            self.binary_ema["шаг"] = max(self.binary_ema["шаг"], raw_scores["шаг"] * 0.86)
+
+        dynamic_raw = max(
+            raw_scores["шаг"],
+            raw_scores["присед"],
+            raw_scores["прыжок"],
+            raw_scores["мах рукой"],
+        )
+        if dynamic_raw > 0.35:
+            decay = 1.0 - 0.25 * self._clip01((dynamic_raw - 0.35) / 0.45)
+            self.binary_ema["статика"] *= decay
 
         self.latest_scores = dict(self.binary_ema)
 
         jump_score = self.binary_ema["прыжок"]
-        if jump_score > 0.78 and self.jump_cooldown == 0:
-            self.jump_cooldown = 8
+        if jump_score > 0.74 and self.jump_cooldown == 0:
+            self.jump_cooldown = 6
         elif self.jump_cooldown > 0:
             self.jump_cooldown -= 1
 
-        action = max(self.binary_ema, key=self.binary_ema.get)
+        adjusted_scores = dict(self.binary_ema)
+        if dynamic_raw > 0.28:
+            adjusted_scores["статика"] *= 1.0 - 0.40 * self._clip01((dynamic_raw - 0.28) / 0.50)
+        adjusted_scores["шаг"] = max(
+            adjusted_scores["шаг"],
+            0.55 * raw_scores["шаг"] + 0.45 * adjusted_scores["шаг"],
+        )
+        adjusted_scores["прыжок"] = max(
+            adjusted_scores["прыжок"],
+            0.60 * raw_scores["прыжок"] + 0.40 * adjusted_scores["прыжок"],
+        )
+
+        action = max(adjusted_scores, key=adjusted_scores.get)
         conf = self.binary_ema[action]
 
+        if raw_scores["шаг"] > 0.34 and raw_scores["шаг"] > raw_scores["статика"] + 0.02:
+            action = "шаг"
+            conf = max(conf, raw_scores["шаг"] * 0.90)
+        if raw_scores["прыжок"] > 0.36 and raw_scores["прыжок"] > raw_scores["статика"] + 0.02:
+            action = "прыжок"
+            conf = max(conf, raw_scores["прыжок"] * 0.92)
+
                                                                                                   
-        if action == "прыжок" and conf < 0.58:
+        if action == "прыжок" and conf < 0.42:
             alt = {k: v for k, v in self.binary_ema.items() if k != "прыжок"}
             action = max(alt, key=alt.get)
             conf = alt[action]
 
                                                                   
-        if conf < 0.43:
+        dynamic_peak = max(
+            raw_scores["шаг"],
+            raw_scores["присед"],
+            raw_scores["прыжок"],
+            raw_scores["мах рукой"],
+        )
+        if conf < 0.33 and dynamic_peak < 0.36:
             action = "статика"
             conf = max(conf, self.binary_ema["статика"])
 
                                       
         if action != self.last_action:
-            margin = 0.08 if action == "прыжок" else 0.05
-            if conf < self.binary_ema.get(self.last_action, 0.0) + margin:
+            if action in ("прыжок", "шаг") and raw_scores[action] > raw_scores["статика"]:
+                margin = -0.02
+            else:
+                margin = 0.05 if action == "прыжок" else 0.03
+            if conf < adjusted_scores.get(self.last_action, self.binary_ema.get(self.last_action, 0.0)) + margin:
                 action = self.last_action
-                conf = self.binary_ema.get(action, conf * 0.9)
+                conf = adjusted_scores.get(action, self.binary_ema.get(action, conf * 0.9))
 
                                                                    
         self.action_hist.append(action)
         if self.action_hist:
             majority = max(set(self.action_hist), key=self.action_hist.count)
-            if majority != action and self.binary_ema[majority] + 0.03 >= self.binary_ema[action]:
+            if (
+                majority != action
+                and action not in ("прыжок", "шаг")
+                and self.binary_ema[majority] + 0.015 >= self.binary_ema[action]
+            ):
                 action = majority
                 conf = self.binary_ema[action]
 
