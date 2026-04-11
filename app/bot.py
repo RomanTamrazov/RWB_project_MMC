@@ -15,7 +15,7 @@ from telegram.ext import (
 
 from process_media import process_video
 
-TOKEN = ""
+TOKEN = "8668673885:AAElLmg8nxLSlMO6ZCWg98NwDN6lWHGZ1DI"
 MAX_VIDEO_MB = 20
 
 DOWNLOAD_DIR = "bot_data"
@@ -77,9 +77,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "🔬 Проект:\n"
             "Реальное распознавание действий и намерений человека\n"
-            "на основе позы, объектов и эмоций.\n\n"
-            "⚙️ Работает на CPU\n"
-            "🎯 Для стендов и конференций"
+            "⚙️ Работает на CPU"
         )
 
     elif text == "❌ Отмена":
@@ -197,7 +195,7 @@ def main():
     app.add_handler(MessageHandler(filters.VIDEO, handle_video))
     app.add_handler(MessageHandler(filters.Document.VIDEO, handle_video))
 
-    print("🤖 Бот запущен")
+    print("Бот запущен")
     app.run_polling()
 
 if __name__ == "__main__":
