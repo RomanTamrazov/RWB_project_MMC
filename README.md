@@ -83,7 +83,7 @@ python app/main.py
 ## И возвращает видео/картинку с:
 - bounding box человека
 - действием
-- скилетом
+- скелетом
 ## Запуск:
 ```bash
 python app/bot.py
