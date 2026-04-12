@@ -15,7 +15,7 @@ from telegram.ext import (
 
 from process_media import process_video
 
-TOKEN = ""
+TOKEN = "8668673885:AAElLmg8nxLSlMO6ZCWg98NwDN6lWHGZ1DI"
 MAX_VIDEO_MB = 20
 
 DOWNLOAD_DIR = "bot_data"
@@ -131,19 +131,25 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     input_path = os.path.join(DOWNLOAD_DIR, f"{uid}_input.mp4")
     output_path = os.path.join(DOWNLOAD_DIR, f"{uid}_output.mp4")
+    output_3d_path = os.path.join(DOWNLOAD_DIR, f"{uid}_skeleton3d.mp4")
 
     await file.download_to_drive(input_path)
 
     await update.message.reply_text("⏳ Обрабатываю видео...")
-    process_video(
+    result = process_video(
         input_path,
         output_path,
         output_max_width=960,
         target_fps=18,
+        trajectory_3d_video_path=output_3d_path,
+    )
+    processed_video_path = result.get("output_video_path", output_path) if isinstance(result, dict) else output_path
+    trajectory_3d_video_path = (
+        result.get("trajectory_3d_video_path", output_3d_path) if isinstance(result, dict) else output_3d_path
     )
 
     try:
-        with open(output_path, "rb") as video_file:
+        with open(processed_video_path, "rb") as video_file:
             await update.message.reply_video(
                 video=video_file,
                 caption=f"✅ Готово! ({media_kind})",
@@ -159,10 +165,10 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "⚠️ Не успел отправить как видео (TimedOut). Пробую отправить как файл..."
         )
         try:
-            with open(output_path, "rb") as video_file:
+            with open(processed_video_path, "rb") as video_file:
                 await update.message.reply_document(
                     document=video_file,
-                    filename=os.path.basename(output_path),
+                    filename=os.path.basename(processed_video_path),
                     caption="✅ Готово (как файл)!",
                     reply_markup=MAIN_KEYBOARD,
                     read_timeout=300,
@@ -171,19 +177,57 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     pool_timeout=60,
                 )
         except TelegramError as e:
-            size_mb = os.path.getsize(output_path) / (1024 * 1024)
+            size_mb = os.path.getsize(processed_video_path) / (1024 * 1024)
             await update.message.reply_text(
                 f"❌ Не удалось отправить результат ({type(e).__name__}). "
                 f"Размер файла: {size_mb:.1f} MB. Попробуй видео короче."
             )
     except TelegramError as e:
-        size_mb = os.path.getsize(output_path) / (1024 * 1024)
+        size_mb = os.path.getsize(processed_video_path) / (1024 * 1024)
         await update.message.reply_text(
             f"❌ Ошибка отправки ({type(e).__name__}). "
             f"Размер файла: {size_mb:.1f} MB."
         )
-    finally:
-        USER_STATE[uid] = None
+    if trajectory_3d_video_path and os.path.exists(trajectory_3d_video_path):
+        try:
+            with open(trajectory_3d_video_path, "rb") as traj_video:
+                await update.message.reply_video(
+                    video=traj_video,
+                    caption="🧭 3D-видео скелета за всё видео",
+                    supports_streaming=True,
+                    read_timeout=300,
+                    write_timeout=300,
+                    connect_timeout=60,
+                    pool_timeout=60,
+                )
+        except TimedOut:
+            await update.message.reply_text(
+                "⚠️ 3D-видео не отправилось как streaming video. Пробую как файл..."
+            )
+            try:
+                with open(trajectory_3d_video_path, "rb") as traj_video:
+                    await update.message.reply_document(
+                        document=traj_video,
+                        filename=os.path.basename(trajectory_3d_video_path),
+                        caption="🧭 3D-видео скелета (как файл)",
+                        read_timeout=300,
+                        write_timeout=300,
+                        connect_timeout=60,
+                        pool_timeout=60,
+                    )
+            except TelegramError as e:
+                size_mb = os.path.getsize(trajectory_3d_video_path) / (1024 * 1024)
+                await update.message.reply_text(
+                    f"⚠️ Не удалось отправить 3D-видео ({type(e).__name__}). "
+                    f"Размер: {size_mb:.1f} MB."
+                )
+        except TelegramError as e:
+            size_mb = os.path.getsize(trajectory_3d_video_path) / (1024 * 1024)
+            await update.message.reply_text(
+                f"⚠️ Ошибка отправки 3D-видео ({type(e).__name__}). "
+                f"Размер: {size_mb:.1f} MB."
+            )
+    USER_STATE[uid] = None
 
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
