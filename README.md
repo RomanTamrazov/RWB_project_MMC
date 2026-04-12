@@ -1,5 +1,7 @@
 # 🎥 RWB Final Progect MMC / Team Nam Ne DANO
-![Project Logo](kirill.mp4)
+
+![Project Logo](kirill.gif)
+
 Проект по **распознаванию действий, в реальном времени и видио** с использованием компьютерного зрения и позных моделей.  
 Система работает **на CPU**.
 
